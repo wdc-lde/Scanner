@@ -66,10 +66,10 @@
 </head>
 <body>
   <div class="container" id="userInfoContainer">
-    <h2>Please enter your details</h2>
+    <h2>Warehouse Item / Location Scanner</h2>
     <form id="userForm">
       <div>
-        <label for="userName">Name:</label>
+        <label for="userName">User Name:</label>
         <input type="text" id="userName" required>
       </div>
       <div>
@@ -180,6 +180,7 @@
         e.preventDefault();
         const inputValue = scanInput.value.trim();
         if(currentState === 'item') {
+          // Display error if input is empty or if all characters are numeric
           if(inputValue === "" || /^\d+$/.test(inputValue)) {
             showError("Item");
             clearInput();
