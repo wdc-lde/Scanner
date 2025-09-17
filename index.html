@@ -5,14 +5,12 @@
   <title>Barcode/QR Code Data Entry</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <style>
-    body { 
-      font-family: Arial, sans-serif; 
+    body {
+      font-family: Arial, sans-serif;
       margin: 20px;
       background: #f5f5f5;
     }
-    h1, h2 {
-      color: #333;
-    }
+    h1, h2 { color: #333; }
     .container {
       max-width: 600px;
       margin: auto;
@@ -21,46 +19,68 @@
       border-radius: 4px;
       box-shadow: 0px 0px 10px rgba(0,0,0,0.1);
     }
-    .hidden {
-      display: none;
-    }
+    .hidden { display: none; }
     #scanInput {
       width: 100%;
       padding: 10px;
       font-size: 1.1em;
-      margin-bottom: 10px;
+      margin-bottom: 8px;
     }
+
+    /* Scrollable table container + sticky header */
     #dataTableContainer {
       max-height: 200px;
       overflow-y: auto;
       margin-bottom: 10px;
       border: 1px solid #ccc;
     }
-    table {
-      width: 100%;
-      border-collapse: collapse;
-    }
+    table { width: 100%; border-collapse: collapse; }
     th, td {
       padding: 8px;
       border-bottom: 1px solid #ddd;
       text-align: left;
       font-size: 1em;
     }
-    tr:hover {
-      background-color: #f1f1f1;
+    tr:hover { background-color: #f1f1f1; }
+    #dataTable thead th {
+      position: sticky;
+      top: 0;
+      background: #fff;
+      z-index: 5;
     }
-    .error {
-      color: red;
-      margin-bottom: 10px;
-    }
-    .info {
-      margin-bottom: 10px;
-    }
+
+    .error { color: red; margin-bottom: 10px; }
+    .info { margin-bottom: 10px; }
     button {
       padding: 10px 15px;
       font-size: 1em;
       margin-right: 10px;
       cursor: pointer;
+    }
+
+    /* Virtual Enter button */
+    .controlBtn {
+      width: 80px;   /* bigger width */
+      height: 40px;  /* bigger height */
+      border-radius: 6px;
+      border: none;
+      display: inline-flex;
+      justify-content: center;
+      align-items: center;
+      background: #ccc; /* default (disabled) */
+      color: #fff;
+      font-size: 1.2em;
+    }
+    .controlBtn:disabled { background: #ccc; }
+    .controlBtn svg {
+      width: 24px; height: 24px;
+    }
+
+    /* Center container for virtual Enter button */
+    #enterBtnContainer {
+      display: flex;
+      justify-content: center;
+      margin-bottom: 10px;
     }
   </style>
 </head>
@@ -88,8 +108,15 @@
 
     <div id="errorMessage" class="error"></div>
 
-    <!-- Scanning input -->
+    <!-- Scanning input + Virtual Enter -->
     <input type="text" id="scanInput" placeholder="Scan/Type Item" autofocus>
+    <div id="enterBtnContainer">
+      <button id="triggerEnterBtn" class="controlBtn" disabled aria-label="Confirm scan">
+        <svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="4">
+          <polyline points="20 6 9 17 4 12"/>
+        </svg>
+      </button>
+    </div>
 
     <!-- Data Table -->
     <div id="dataTableContainer">
@@ -111,22 +138,28 @@
   </div>
 
   <script>
-    // Global variables to track state and data
-    let currentState = 'item'; // possible values: 'item', 'location'
+    // --- State & data ---
+    let currentState = 'item'; // 'item' | 'location'
     let currentItem = '';
     let scannedData = [];
-    
-    // Check local storage
-    if(localStorage.getItem('scannedData')) {
-      scannedData = JSON.parse(localStorage.getItem('scannedData'));
+
+    if (localStorage.getItem('scannedData')) {
+      try {
+        scannedData = JSON.parse(localStorage.getItem('scannedData')) || [];
+        if (!Array.isArray(scannedData)) scannedData = [];
+      } catch {
+        scannedData = [];
+      }
     }
 
+    // --- Element refs ---
     const userInfoContainer = document.getElementById('userInfoContainer');
     const mainApp = document.getElementById('mainApp');
     const userForm = document.getElementById('userForm');
     const displayName = document.getElementById('displayName');
     const displayZone = document.getElementById('displayZone');
     const scanInput = document.getElementById('scanInput');
+    const triggerEnterBtn = document.getElementById('triggerEnterBtn');
     const errorMessage = document.getElementById('errorMessage');
     const dataTableBody = document.querySelector('#dataTable tbody');
     const exportCSVBtn = document.getElementById('exportCSV');
@@ -134,109 +167,123 @@
     let userName = "";
     let warehouseZone = "";
 
-    // Load existing data into the table if any
-    function loadTable() {
-      dataTableBody.innerHTML = "";
-      scannedData.forEach((entry, index) => {
-        const row = document.createElement('tr');
-        row.innerHTML = `
-          <td>${entry.item}</td>
-          <td>${entry.location}</td>
-          <td><button data-index="${index}" class="deleteRow">Delete</button></td>
-        `;
-        dataTableBody.appendChild(row);
-      });
-      autoScroll();
+    function saveData() {
+      localStorage.setItem('scannedData', JSON.stringify(scannedData));
     }
 
-    // Auto scroll table container to bottom
     function autoScroll() {
       const container = document.getElementById('dataTableContainer');
       container.scrollTop = container.scrollHeight;
     }
 
-    // Save scannedData to local storage
-    function saveData() {
-      localStorage.setItem('scannedData', JSON.stringify(scannedData));
-    }
-
-    // Show error message
     function showError(field) {
       errorMessage.textContent = `campo incorrecto, verifica que estes escaneando (${field})`;
-      setTimeout(() => {
-        errorMessage.textContent = "";
-      }, 3000);
+      setTimeout(() => { errorMessage.textContent = ""; }, 3000);
     }
 
-    // Clear the input field and set focus
+    function updateEnterButtonState() {
+      const empty = scanInput.value.trim() === '';
+      triggerEnterBtn.disabled = empty;
+      triggerEnterBtn.style.background = empty ? '#ccc' : '#8EFF26';
+    }
+
     function clearInput() {
       scanInput.value = "";
+      updateEnterButtonState();
       scanInput.focus();
     }
 
-    // Handle input scanning (Enter key)
-    scanInput.addEventListener('keydown', function(e) {
+    function loadTable() {
+      dataTableBody.innerHTML = "";
+      scannedData.forEach((entry, index) => {
+        const tr = document.createElement('tr');
+
+        const tdItem = document.createElement('td');
+        tdItem.textContent = entry.item ?? '';
+
+        const tdLoc = document.createElement('td');
+        tdLoc.textContent = entry.location ?? '';
+
+        const tdAction = document.createElement('td');
+        const delBtn = document.createElement('button');
+        delBtn.textContent = 'Delete';
+        delBtn.className = 'deleteRow';
+        delBtn.setAttribute('data-index', String(index));
+        tdAction.appendChild(delBtn);
+
+        tr.appendChild(tdItem);
+        tr.appendChild(tdLoc);
+        tr.appendChild(tdAction);
+        dataTableBody.appendChild(tr);
+      });
+      autoScroll();
+    }
+
+    function handleEnter() {
+      const inputValue = scanInput.value.trim();
+
+      if (currentState === 'item') {
+        if (inputValue === "" || /^\d+$/.test(inputValue)) {
+          showError("Item");
+          clearInput();
+          return;
+        }
+        currentItem = inputValue;
+        currentState = 'location';
+        scanInput.placeholder = "Scan/Type Location (Only numeric)";
+        clearInput();
+        return;
+      }
+
+      if (currentState === 'location') {
+        if (currentItem === "") {
+          showError("Item");
+          clearInput();
+          return;
+        }
+        if (!/^\d+$/.test(inputValue)) {
+          showError("Location");
+          clearInput();
+          return;
+        }
+        const entry = { item: currentItem, location: inputValue };
+        scannedData.push(entry);
+        saveData();
+        loadTable();
+
+        currentItem = "";
+        currentState = 'item';
+        scanInput.placeholder = "Scan/Type Item";
+        clearInput();
+        return;
+      }
+    }
+
+    scanInput.addEventListener('keydown', (e) => {
       if (e.key === 'Enter') {
         e.preventDefault();
-        const inputValue = scanInput.value.trim();
-        if(currentState === 'item') {
-          // Display error if input is empty or if all characters are numeric
-          if(inputValue === "" || /^\d+$/.test(inputValue)) {
-            showError("Item");
-            clearInput();
-            return;
-          }
-          // Save the item and prepare for location input
-          currentItem = inputValue;
-          currentState = 'location';
-          scanInput.placeholder = "Scan/Type Location (Only numeric)";
-          clearInput();
-        } else if(currentState === 'location') {
-          // Ensure an item was scanned first
-          if(currentItem === "") {
-            showError("Item");
-            clearInput();
-            return;
-          }
-          // Validate that location contains only numeric characters
-          if(!/^\d+$/.test(inputValue)) {
-            showError("Location");
-            clearInput();
-            return;
-          }
-          // Add entry to data
-          const entry = {
-            item: currentItem,
-            location: inputValue
-          };
-          scannedData.push(entry);
-          saveData();
-          loadTable();
-          // Reset for next entry
-          currentItem = "";
-          currentState = 'item';
-          scanInput.placeholder = "Scan/Type Item";
-          clearInput();
-        }
+        handleEnter();
       }
     });
 
-    // Delete row functionality
+    triggerEnterBtn.addEventListener('click', () => {
+      if (!triggerEnterBtn.disabled) handleEnter();
+    });
+
+    scanInput.addEventListener('input', updateEnterButtonState);
+
     dataTableBody.addEventListener('click', function(e) {
-      if(e.target && e.target.matches("button.deleteRow")) {
+      if (e.target && e.target.matches("button.deleteRow")) {
         const index = e.target.getAttribute('data-index');
-        scannedData.splice(index, 1);
+        scannedData.splice(Number(index), 1);
         saveData();
         loadTable();
       }
     });
 
-    // Export CSV functionality
     exportCSVBtn.addEventListener('click', function() {
       let csvContent = "data:text/csv;charset=utf-8,";
-      // Include user info in the CSV header
-      csvContent += `User:,${userName}\nWarehouse Zone:,${warehouseZone}\n\n`;
-      // Table header
+      csvContent += `User:,${displayName.textContent}\nWarehouse Zone:,${displayZone.textContent}\n\n`;
       csvContent += "Item,Location\n";
       scannedData.forEach(entry => {
         csvContent += `${entry.item},${entry.location}\n`;
@@ -251,32 +298,28 @@
       document.body.removeChild(link);
     });
 
-    // Handle user info form submission
     userForm.addEventListener('submit', function(e) {
       e.preventDefault();
       userName = document.getElementById('userName').value.trim();
       warehouseZone = document.getElementById('warehouseZone').value.trim();
-      if(userName === "" || warehouseZone === "") {
+      if (userName === "" || warehouseZone === "") {
         alert("Please fill in both fields.");
         return;
       }
-      // Display user info on the main page
       displayName.textContent = userName;
       displayZone.textContent = warehouseZone;
-      // Hide user info form and show main app
       userInfoContainer.classList.add('hidden');
       mainApp.classList.remove('hidden');
-      // Load any stored data
       loadTable();
-      scanInput.focus();
+      clearInput();
     });
 
-    // On page load, try to focus on the input if mainApp is visible
     window.onload = function() {
-      if(!mainApp.classList.contains('hidden')) {
-        scanInput.focus();
+      if (!mainApp.classList.contains('hidden')) {
+        clearInput();
       }
     };
   </script>
 </body>
 </html>
+
